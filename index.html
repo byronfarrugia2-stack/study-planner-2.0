@@ -109,10 +109,14 @@ label.row>span:first-child{flex:1}
 <section id="v-plan" hidden>
 <h1>Weekly planner</h1>
 <details class="card" id="ap"><summary><b>🤖 Plan my week for me</b></summary>
-<p class="mut" style="margin:8px 0 12px">Tell it when you’re free and what each task needs. It fills your planner with study blocks, putting the most urgent and highest priority work first and mixing subjects so you don’t burn out on one.</p>
-<h2>1. When are you free? <span class="mut" style="font-weight:400;font-size:14px">Add as many time slots per day as you need</span></h2>
+<p class="mut" style="margin:8px 0 12px">Tell it your fixed routine (school, sport, commuting and so on), when you wake and sleep, and what each task needs. It fills your whole week: your routine, meals, sleep, study blocks for your most urgent work, and downtime.</p>
+<h2>1. Your week</h2>
+<p class="mut" style="margin-bottom:8px">Add everything that’s fixed. Whatever time is left becomes study and downtime.</p>
 <div id="fr"></div>
-<p class="mut" style="margin:6px 0">Remove every slot for a day off. You can also paint your own Downtime blocks in the grid below and the plan will work around them.</p>
+<div class="tools" style="margin:8px 0"><button id="ra">+ Add school, sport, commute...</button></div>
+<label class="row"><span>I wake up at</span><select id="wk"></select></label>
+<label class="row"><span>I go to bed at</span><select id="bd"></select></label>
+<label class="row"><span>Include meal breaks</span><input type="checkbox" id="ml"></label>
 <label class="row"><span>Most study hours in one day</span><input type="number" min="1" max="10" id="mx" style="width:80px"></label>
 <label class="row"><span>Downtime I need each day (hours, kept free of study)</span><input type="number" min="0" max="6" id="dt" style="width:80px"></label>
 <label class="row"><span>Take a break after this many hours in a row</span><input type="number" min="1" max="8" id="bk" style="width:80px"></label>
@@ -124,13 +128,12 @@ label.row>span:first-child{flex:1}
 <div class="card tools" id="pal"></div>
 <div class="card tools">
 <input id="sub" list="subs" placeholder="Subject for study blocks">
-<button id="gen">Quick plan</button>
 <button id="clr">Clear all</button>
 <button id="un">Undo</button>
 <select id="cpd" aria-label="Day to copy"><option value="0">Mon</option><option value="1">Tue</option><option value="2">Wed</option><option value="3">Thu</option><option value="4">Fri</option><option value="5">Sat</option><option value="6">Sun</option></select><button id="cp">Copy to other days</button>
 <button id="pdf">Save as PDF</button>
 </div>
-<p class="mut" style="margin-bottom:10px">Pick an activity, then click or drag across the grid. Quick plan fills free evenings and weekends automatically. For control over your free times and hours, use Plan my week above.</p>
+<p class="mut" style="margin-bottom:10px">Pick an activity, then click or drag across the grid. Anything you paint by hand is kept when you plan. Use Plan my week above to fill in everything else.</p>
 <div class="grid" id="grid"></div>
 </section>
 
@@ -237,7 +240,7 @@ const days=d=>Math.round((new Date(d+'T00:00')-new Date(day()+'T00:00'))/864e5);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const mins=ds=>S.log.filter(l=>l.d==ds).reduce((a,l)=>a+l.m,0);
 const toast=m=>{const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),2600)};
-const A={study:['📚','Study','#3b5bfd'],sleep:['😴','Sleep','#7c6fd6'],school:['🏫','School','#d99a00'],commute:['🚗','Commute','#7f8aa0'],social:['👥','Social','#e4569b'],meals:['🍔','Meals','#f0833a'],exercise:['⚽','Exercise','#12a38f'],chores:['🧹','Chores','#6b8e23'],fun:['🎮','Fun','#a855f7'],rest:['🛋','Downtime','#38a3c8']};
+const A={study:['📚','Study','#3b5bfd'],sleep:['😴','Sleep','#7c6fd6'],school:['🏫','School','#d99a00'],commute:['🚗','Commute','#7f8aa0'],social:['👥','Social','#e4569b'],meals:['🍔','Meals','#f0833a'],exercise:['⚽','Sport','#12a38f'],chores:['🧹','Chores','#6b8e23'],fun:['🎮','Fun','#a855f7'],rest:['🛋','Downtime','#38a3c8']};
 const DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],H0=6,H1=22;
 let tool='study',view='today',hist=[];
 const todayIdx=()=>(new Date().getDay()+6)%7;
@@ -287,10 +290,10 @@ $('#grid').addEventListener('click',paint);
 $('#grid').addEventListener('pointerover',e=>{if(e.buttons==1&&e.pointerType=='mouse')paint(e)});
 $('#clr').onclick=()=>{if(confirm('Clear the whole planner?')){snap();S.plan={};save();rPlan()}};
 $('#pdf').onclick=()=>print();
-$('#gen').onclick=()=>{
+const _g=()=>{
  const T=S.tasks.filter(t=>!t.done);
  if(!T.length)return toast('Add a task first so there’s something to plan');
- snap();for(const k in S.plan)if(S.plan[k].endsWith('|a'))delete S.plan[k];
+ snap();for(const k in S.plan)if(S.plan[k].startsWith('study')&&S.plan[k].endsWith('|a'))delete S.plan[k];
  const mon=new Date();mon.setDate(mon.getDate()-todayIdx());
  const a=T.map(()=>0),P=T.map(pri);let total=0;
  for(let d=0;d<7;d++){const dt=new Date(mon);dt.setDate(mon.getDate()+d);const ds=day(dt);if(ds<day())continue;
@@ -367,42 +370,54 @@ $('#file').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>
 $('#wipe').onclick=()=>{if(confirm('Erase all tasks, cards, plans and history?')){S={tasks:[],cards:[],log:[],plan:{},grades:[],set:S.set,lastMail:'',rev:0,theme:S.theme};save();render()}};
 
 /* ---- plan my week ---- */
-const hl=h=>h==12?'12pm':h<12?h+'am':(h-12)+'pm',PW={1:1,2:2,3:4};
-function FR(){if(!S.fw){const w={};for(let d=0;d<7;d++){const o=S.free&&S.free[d];w[d]=o?(o[0]<o[1]?[o.slice()]:[]):d<5?[[16,21]]:[[9,12],[14,17]]}S.fw=w}return S.fw}
-function rAP(){FR();
- const o=n=>[...Array(17)].map((_,i)=>i+6).map(h=>`<option value="${h}"${h==n?' selected':''}>${hl(h)}</option>`).join('');
- $('#fr').innerHTML=DAYS.map((d,i)=>`<div class="row" style="flex-wrap:wrap"><b style="width:40px">${d}</b>`+(S.fw[i].map((w,j)=>`<div style="display:flex;gap:6px;align-items:center">from <select data-f="${i}-${j}-0" aria-label="${d} from">${o(w[0])}</select> to <select data-f="${i}-${j}-1" aria-label="${d} to">${o(w[1])}</select><button class="x" data-rm="${i}-${j}" aria-label="Remove time slot">✕</button></div>`).join('')||'<span class="mut">Day off</span>')+`<button data-add="${i}">+ Add time</button></div>`).join('');
+const hl=h=>h==12?'12pm':h<12?h+'am':h==24?'12am':(h-12)+'pm',PW={1:1,2:2,3:4};
+const RT=()=>S.rt=S.rt||[];
+const opts=(a,b,n)=>{let o='';for(let h=a;h<=b;h++)o+=`<option value="${h}"${h==n?' selected':''}>${hl(h)}</option>`;return o};
+function rAP(){RT();
+ $('#fr').innerHTML=S.rt.map((r,i)=>`<div class="row" style="flex-wrap:wrap"><select data-ra="${i}" aria-label="Activity">${Object.entries(A).map(([k,v])=>`<option value="${k}"${k==r.a?' selected':''}>${v[0]} ${v[1]}</option>`).join('')}</select> from <select data-rf="${i}" aria-label="From">${opts(6,22,r.f)}</select> to <select data-rt="${i}" aria-label="To">${opts(7,23,r.t)}</select><button class="x" data-rx="${i}" aria-label="Remove">✕</button><div style="flex-basis:100%;display:flex;gap:10px;flex-wrap:wrap">${DAYS.map((d,j)=>`<label><input type="checkbox" data-rd="${i}-${j}"${r.d.includes(j)?' checked':''}> ${d}</label>`).join('')}</div></div>`).join('')||'<p class="mut">Nothing added yet. Add school, sport, work, commuting, anything that happens at set times.</p>';
+ $('#wk').innerHTML=opts(5,10,S.wk||7);$('#bd').innerHTML=opts(20,23,S.bd||22);$('#ml').checked=S.ml!==false;
  $('#mx').value=S.mx||3;$('#dt').value=S.dt==null?1:S.dt;$('#bk').value=S.bk||2;
  $('#at').innerHTML=open().map(t=>`<div class="row"><span>${t.type=='Exam'?'🎯':'📝'}</span><span>${esc(t.title)} <span class="mut">due ${due(days(t.due)).toLowerCase()}</span></span><input type="number" min="1" max="40" step="1" data-te="${t.id}" value="${t.est||t.diff*2}" style="width:70px" aria-label="Hours needed"><span class="mut">hrs</span><select data-tp="${t.id}" aria-label="Priority"><option value="3"${t.prio==3?' selected':''}>High</option><option value="2"${(t.prio||2)==2?' selected':''}>Medium</option><option value="1"${t.prio==1?' selected':''}>Low</option></select></div>`).join('')||'<p class="mut">Add tasks in the Tasks tab first.</p>'}
-$('#ap').addEventListener('change',e=>{const t=e.target;
- if(t.dataset.f){const [d,j,i]=t.dataset.f.split('-');S.fw[d][j][i]=+t.value}
- else if(t.dataset.te)S.tasks.find(x=>x.id==t.dataset.te).est=+t.value||1;
- else if(t.dataset.tp)S.tasks.find(x=>x.id==t.dataset.tp).prio=+t.value;
+$('#ap').addEventListener('change',e=>{const t=e.target,D=t.dataset;
+ if(D.ra!=null)S.rt[D.ra].a=t.value;
+ else if(D.rf!=null)S.rt[D.rf].f=+t.value;
+ else if(D.rt!=null)S.rt[D.rt].t=+t.value;
+ else if(D.rd!=null){const [i,j]=D.rd.split('-').map(Number),r=S.rt[i];r.d=t.checked?[...new Set([...r.d,j])].sort():r.d.filter(x=>x!=j)}
+ else if(D.te)S.tasks.find(x=>x.id==D.te).est=+t.value||1;
+ else if(D.tp)S.tasks.find(x=>x.id==D.tp).prio=+t.value;
+ else if(t.id=='wk')S.wk=+t.value;
+ else if(t.id=='bd')S.bd=+t.value;
+ else if(t.id=='ml')S.ml=t.checked;
  else if(t.id=='mx')S.mx=Math.min(10,+t.value||3);
  else if(t.id=='dt')S.dt=Math.max(0,Math.min(6,+t.value||0));
  else if(t.id=='bk')S.bk=Math.max(1,Math.min(8,+t.value||2));
  else return;save()});
 $('#ap').addEventListener('click',e=>{const t=e.target;
- if(t.dataset.add){const w=S.fw[t.dataset.add],l=w[w.length-1],a=l?Math.min(l[1]+1,20):16;w.push([a,Math.min(a+2,22)]);save();rAP()}
- else if(t.dataset.rm){const [d,j]=t.dataset.rm.split('-');S.fw[d].splice(j,1);save();rAP()}});
-function aplan(){FR();
+ if(t.id=='ra'){RT().push({a:'school',d:[0,1,2,3,4],f:8,t:15});save();rAP()}
+ else if(t.dataset.rx!=null){S.rt.splice(+t.dataset.rx,1);save();rAP()}});
+function aplan(){RT();
  const T=open().map(t=>{const est=Math.ceil(t.est||t.diff*2),wk=Math.ceil((Math.max(0,days(t.due))+1)/7);return{t,left:days(t.due)>6?Math.ceil(est/wk):est}});
- if(!T.length)return toast('Add a task first so there’s something to plan');
- snap();for(const k in S.plan)if(S.plan[k].endsWith('|a'))delete S.plan[k];
- const mon=new Date();mon.setDate(mon.getDate()-todayIdx());const tds=day(),mx=S.mx||3,dtm=S.dt==null?1:S.dt,bk=S.bk||2,got={};let total=0,last=-1,rest=0;
- for(let d=0;d<7;d++){const dd=new Date(mon);dd.setDate(mon.getDate()+d);const ds=day(dd);if(ds<tds)continue;
-  const hrs=[...new Set(S.fw[d].flatMap(w=>{const r=[];for(let h=w[0];h<w[1];h++)r.push(h);return r}))].sort((a,b)=>a-b).filter(h=>!S.plan[d+'-'+h]);
+ snap();Object.keys(S.plan).forEach(k=>{if(S.plan[k].endsWith('|a'))delete S.plan[k]});
+ const mon=new Date();mon.setDate(mon.getDate()-todayIdx());
+ const tds=day(),mx=S.mx||3,dtm=S.dt==null?1:S.dt,bk=S.bk||2,wk=S.wk||7,bd=S.bd||22,got={};let total=0,last=-1;
+ const put=(d,h,v)=>{const k=d+'-'+h;if(h>=H0&&h<=H1&&!S.plan[k])S.plan[k]=v};
+ for(let d=0;d<7;d++){const dd=new Date(mon);dd.setDate(mon.getDate()+d);const ds=day(dd);
+  S.rt.forEach(r=>{if(r.d.includes(d))for(let h=r.f;h<r.t;h++)put(d,h,r.a+'||a')});
+  for(let h=H0;h<=H1;h++)if(h<wk||h>=bd)put(d,h,'sleep||a');
+  if(S.ml!==false)[wk,12,18].forEach(h=>put(d,h,'meals||a'));
+  const hrs=[];for(let h=H0;h<=H1;h++)if(!S.plan[d+'-'+h])hrs.push(h);
   const nd=Math.min(dtm,Math.max(0,hrs.length-1));
-  hrs.slice(hrs.length-nd).forEach(h=>{S.plan[d+'-'+h]='rest||a';rest++});
+  hrs.slice(hrs.length-nd).forEach(h=>put(d,h,'rest||a'));
   let n=0,prev=-9,run=0;
-  for(const h of hrs.slice(0,hrs.length-nd)){if(n>=mx)break;if(prev===h-1&&run>=bk)continue;
+  if(ds>=tds)for(const h of hrs.slice(0,hrs.length-nd)){if(n>=mx)break;if(prev===h-1&&run>=bk)continue;
    let bi=-1,bs=0;T.forEach((x,i)=>{if(x.left<=0||(x.t.due>=tds&&x.t.due<ds))return;
     const dl=x.t.due<tds?1:Math.max(1,days(x.t.due)-days(ds)+1),sc=PW[x.t.prio||2]*x.left/dl*(i==last?.7:1);if(sc>bs){bs=sc;bi=i}});
-   if(bi<0)continue;const x=T[bi];x.left--;got[bi]=(got[bi]||0)+1;total++;n++;last=bi;run=prev===h-1?run+1:1;prev=h;S.plan[d+'-'+h]='study|'+(x.t.subject||x.t.title)+'|a'}}
+   if(bi<0)continue;const x=T[bi];x.left--;got[bi]=(got[bi]||0)+1;total++;n++;last=bi;run=prev===h-1?run+1:1;prev=h;put(d,h,'study|'+(x.t.subject||x.t.title)+'|a')}
+  hrs.forEach(h=>put(d,h,'rest||a'))}
  save();rPlan();
- const miss=T.filter(x=>x.left>0).map(x=>`${x.t.title} (${x.left}h short)`);
- $('#pout').textContent=total?`Planned ${total} study hours this week, with ${rest} hours of downtime kept free:\n`+T.map((x,i)=>got[i]?`${x.t.title}: ${got[i]}h`:'').filter(Boolean).join('\n')+(miss.length?`\n\nNot enough free time for: ${miss.join(', ')}. Add free slots, raise the daily limit, or lower the hours needed.`:'\n\nEverything fits. Undo is available if you want to go back.'):'No free hours were left this week. Add more free time slots above and try again.';
- toast(total?`Planned ${total} study hours`:'Nothing fit this week')}
+ const miss=T.filter(x=>x.left>0).map(x=>`${x.t.title} (${x.left}h short)`),dtn=Object.values(S.plan).filter(v=>v=='rest||a').length;
+ $('#pout').textContent=`Your week is filled in: routine, meals and sleep, ${total} study hours and ${dtn} hours of downtime.`+(total?'\n'+T.map((x,i)=>got[i]?`${x.t.title}: ${got[i]}h`:'').filter(Boolean).join('\n'):'')+(miss.length?`\n\nNot enough free time for: ${miss.join(', ')}. Shorten your commitments, raise the daily limit, lower downtime, or lower the hours needed.`:'\n\nUndo is available if you want to go back.');
+ toast('Week planned')}
 $('#aplan').onclick=aplan;
 
 /* ---- reminders ---- */
